@@ -10,6 +10,7 @@ BACKUP_DIR=${BACKUP_DIR:-/tmp}
 BOTO_CONFIG_PATH=${BOTO_CONFIG_PATH:-/root/.boto}
 GCS_BUCKET=${GCS_BUCKET:-}
 GCS_KEY_FILE_PATH=${GCS_KEY_FILE_PATH:-}
+RETENTION_COUNT=${RETENTION_COUNT:-}
 MONGODB_HOST=${MONGODB_HOST:-localhost}
 MONGODB_PORT=${MONGODB_PORT:-27017}
 MONGODB_DB=${MONGODB_DB:-}
@@ -30,7 +31,7 @@ backup() {
   cmd_auth_part=""
   if [[ ! -z $MONGODB_USER ]] && [[ ! -z $MONGODB_PASSWORD ]]
   then
-    cmd_auth_part="--username=\"$MONGODB_USER\" --password=\"$MONGODB_PASSWORD\""
+    cmd_auth_part="--username=\"$MONGODB_USER\" --password=\"$MONGODB_PASSWORD\" --authenticationDatabase=admin"
   fi
 
   cmd_db_part=""
@@ -99,10 +100,15 @@ err() {
 
 cleanup() {
   rm $BACKUP_DIR/$archive_name
+  NUMBER="$(gsutil ls $GCS_BUCKET/ | wc -l)"
+  RETENTION_COUNT=$((RETENTION_COUNT+1))
+  if [[ ${NUMBER} -gt ${RETENTION_COUNT} ]]
+  then
+    gsutil ls -l gs://dev-conperi-mongodb-backup/ | sort -r -k 2 | tail  +$RETENTION_COUNT | awk '{print $3}' | gsutil rm -I
+  fi
 }
 
 trap err ERR
 backup
 upload_to_gcs
 cleanup
-echo "backup done!"
